@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/libraries",
+                "C:/Users/15966/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino/",
+                "C:/Users/15966/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/variants/standard",
+                "C:/Users/15966/AppData/Local/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/lib/gcc/avr/7.3.0/include",
+                "C:/Users/15966/AppData/Local/Arduino15"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "C:\\Program Files\\mingw64\\bin\\gcc.exe",
+            "cStandard": "c17",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "windows-gcc-x64"
+        }
+    ],
+    "version": 4
+}
