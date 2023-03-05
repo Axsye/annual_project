@@ -1,10 +1,19 @@
 #include "Wire.h"
 #include "I2Cdev.h"
 #include "MPU9250.h"
+#include "PID_v1.h"
 
 #define SWITCH_PIN 4  //开关所接引脚
+#define PIN_INPUT 0
+#define PIN_OUTPUT 3
 #define MPU_ADDRESS 0x68
 #define DECLINATION -11.32
+#define DESTINATION 300
+
+double setpoint, input, output;
+double kp = 2, ki = 5, kd = 1;
+
+PID pid(&input, &output, &setpoint, kp, ki, kd, DIRECT);
 
 MPU9250 mpu;
 
@@ -15,14 +24,17 @@ void setup() {
   mpu.setMagneticDeclination(DECLINATION);
   pinMode(SWITCH_PIN, INPUT);  //初始化开关
   //while(!digitalRead(SWITCH_PIN)){} //摁下开关后程序运行
-  Serial.println("陀螺仪将在5秒内校准\n请将其放置于水平面");
+  //Serial.println("陀螺仪将在5秒内校准\n请将其放置于水平面");
   mpu.verbose(true);
-  delay(5000);
+  //delay(5000);
   mpu.calibrateAccelGyro();
   Serial.println("指南针将在5秒内校准\n请在桌面上画\"8\"字形");
   delay(5000);
   mpu.calibrateMag();
   mpu.verbose(false);
+  setpoint = DESTINATION;
+  pid.SetMode(AUTOMATIC);
+  input = mpu.getYaw();
 }
 
 void loop() {
@@ -33,4 +45,6 @@ void loop() {
       prev_ms = millis();
     }
   }
+  pid.Compute();
+  analogWrite(PIN_OUTPUT, output);
 }
