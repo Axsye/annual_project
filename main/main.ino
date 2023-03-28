@@ -29,11 +29,15 @@ MPU6500_WE myMPU6500 = MPU6500_WE(MPU6500_ADDR);
 #define MPUsetSampleRateDivider 40  //采样率控制值，Sample rate = Internal sample rate / (1 + divider)
 
 
-double input, setpoint, output;
-double raw_input, target;
-double kp = 2, ki = 5, kd = 1;
+double input, target; //用于计算角度差绝对值
+double setpoint;  //当前角度与目标插值
+double output; 
+double raw_input; //原始数据输入
+double kp = 1, ki = 0, kd = 0;  //pid参数(0-1)
 double opposite;
-float Imu_Yaw;
+float Imu_Yaw, unsigned_Imu_Yaw;
+static unsigned long prev_ms;
+static unsigned long delta_time;
 
 //PID设置
 PID pid(&input, &output, &setpoint, kp, ki, kd, DIRECT);
@@ -75,7 +79,7 @@ void setup() {
   //digital low pass filter (DLPF)
   myMPU6500.enableGyrDLPF();
   myMPU6500.setGyrDLPF(MPU6500_DLPF_6);
-  myMPU6500.setSampleRateDivider(MPUsetSampleRateDivider);  //Sample rate = Internal sample rate / (1 + divider) **********************
+  myMPU6500.setSampleRateDivider(MPUsetSampleRateDivider + 1);  //Sample rate = Internal sample rate / (1 + divider) ********+1补偿了漂
   myMPU6500.enableAccDLPF(true);
   myMPU6500.setAccDLPF(MPU6500_DLPF_6);
   //Range setting
@@ -91,20 +95,30 @@ void loop() {
   xyzFloat gyr = myMPU6500.getGyrValues();
   float temp = myMPU6500.getTemperature();
   float resultantG = myMPU6500.getResultantG(gValue);
-  //对角加速度积分,25ms
-  static uint32_t prev_ms = millis();
-  Imu_Yaw += -gyr.z / MPUsetSampleRateDivider *1.5;
-  //限制范围
-  if(Imu_Yaw < 0)
-    Imu_Yaw += 360;
-  if(Imu_Yaw > 360)
-    Imu_Yaw -= 360;
+  //对角加速度积分,25ms，得到imu角度
+  delta_time = millis() - prev_ms; //获取delta_time(ms)
+  prev_ms = millis(); 
+  Imu_Yaw += -gyr.z * ((float)delta_time / 1000);  //积分（gyr.z单位是°/s）
+  //Imu_Yaw += -gyr.z / MPUsetSampleRateDivider *1.5;
+  //限制范围,得到正数角度
+  unsigned_Imu_Yaw = Imu_Yaw;
+  while (unsigned_Imu_Yaw < 0)
+  {
+    unsigned_Imu_Yaw += 360;
+  }
+  while (unsigned_Imu_Yaw > 360)
+  {
+    unsigned_Imu_Yaw -= 360;
+  }
 /*****************************************************************/
 //信息获取部分结束
 
+  //计算偏差，调用pid
   raw_input = Imu_Yaw;
+  double myPID_out = myPID(DESTINATION, raw_input, kp, ki, kd, 360);
   pid.Compute();
 
+  /*串口输出调试信息*/
   Serial.println("Gyroscope data in degrees/s: ");
   Serial.print(gyr.x);
   Serial.print("   ");
@@ -113,14 +127,17 @@ void loop() {
   Serial.println(gyr.z);
 
   Serial.print("Compass_Heading (degrees): "); Serial.println(Compass_Heading());
-  Serial.print("Imu_Heading (degrees): "); Serial.println(Imu_Yaw);
+  Serial.print("Imu_Heading (degrees): "); Serial.print(Imu_Yaw); Serial.print(" unsigned: "); Serial.println(unsigned_Imu_Yaw);
   
+  Serial.print("pid rawoutput is: ");Serial.println(myPID_out);
 
+  Serial.print("delta_time is: ");Serial.println(delta_time);
   Serial.println("********************************************");
 
   //执行输出
   digitalWrite(RELAY_PIN,if_reverse());
-  analogWrite(PIN_OUTPUT,output);
+  //analogWrite(PIN_OUTPUT,output);
+  analogWrite(PIN_OUTPUT, abs((int)(myPID_out * 255)));
 
   delay(1000 / MPUsetSampleRateDivider);
 }
@@ -163,4 +180,29 @@ bool if_reverse(){
   if (target > opposite && target < input)
     return false;
   return true;
+}
+
+double myPID(double rt, double yt, double kp, double ki ,double kd, double range_positive){
+  //rt et输入 range为输入的范围（只要正范围）
+  //kp ki kd输入必须归一化
+  //返回ut 为归一化数
+  double et = rt - yt;
+  double ut;
+  static double intergration;
+  static double differential;
+  static double last_et;
+ 
+  intergration +=  -et * ((float)delta_time / 1000) ;  //对et积分(使用loop里计算的时间增量)
+  
+  //differential = -gyr.z ; //等于et的导数（外部直接输入）
+  
+  //不依赖额外输入的方法
+  differential = et - last_et;
+  last_et = et;;
+  
+  
+  ut = ( (kp * et) + (ki * intergration) + (kd * differential) ) / 3; //得到系数归一化输出ut
+  ut = ut / range_positive; //归一化ut(范围在(-1,1))
+
+  return ut;
 }
